@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#BSUB -J cap_optim
+#BSUB -q hpc
+#BSUB -W 8:00
+#BSUB -R "span[hosts=1]"
+#BSUB -n 12
+#BSUB -M 2GB
+#BSUB -B
+#BSUB -N
+#BSUB -u matbou@dtu.dk
+#BSUB -o OPT.out
+#BSUB -e OPT.error
+
+# For larger calculations, eg. tbtrans may segfault if the max stacksize is too small
+ulimit -s unlimited
+echo SLOTS : $LSB_DJOB_NUMPROC
+echo OMP NUM THREADS : $OMP_NUM_THREADS
+echo LIST OF HOSTS:
+echo "    ${LSB_MCPU_HOSTS}"
+echo The current stack limit is \"$( ulimit -s )\".
+echo ------------------------------------------------------
+source /dtu/sw/dcc/dcc-sw.bash
+module load dcc-setup/2021-nov
+module load siesta
+module load python/3.9.9
+module load numpy
+module load scipy
+module load matplotlib
+module load sisl
+module load pyamg
+module load ase
+module load numba
+
+python3 cap_optim.py
+
