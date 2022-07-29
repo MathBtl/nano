@@ -2,7 +2,9 @@ import sisl
 import numpy as np
 import scipy.sparse as sp
 import scipy.optimize as sciopt
-import cap
+from nanobtl.cap import *
+from nanobtl.utils import *
+from nanobtl.trans import *
 import pandas as pd
 import os
 from time import time
@@ -37,17 +39,13 @@ for index, row in df.iterrows():
 	r_atom      = 1.43420
 	R           = [0.1, 1.5] #used only if a xyz file is input instead of a TSHS file
 	hop         = [0., -2.7]	#to build the hamiltonian
-	f_CAP       = cap.wang
+	f_CAP       = wang
 	params_CAP0 = np.array([2.62])
 	nsc         = eval(row['nsc']) #3 in the periodic boundary axis only
 	if row['Tobj_file'][-3:] != "npy": #(ne,nk) shape
 		Tobj_file = None
 	else:
 		Tobj_file = "./Tobj/"+row['Tobj_file']
-	if row['Robj_file'][-3:] != "npy": #(ne,nk) shape
-		Robj_file = None
-	else:
-		Robj_file = "./Tobj/"+row['Robj_file']
 	if type(row['tol']) != float:
 		tol = None
 	else:
@@ -55,7 +53,7 @@ for index, row in df.iterrows():
 	
 	save_file  = "./res_opt/"+row['save_file']
 
-	if "[" in row['mode']: #if input is a list, words possible: diag, real, hop, X0_zero, refl, sym, transym
+	if "[" in row['mode']: #if input is a list, words possible: diag, real, hop, X0_zero, sym, transym
 		mode   = eval(row['mode']) 
 	else: #can also be a string
 		mode   = row['mode']
@@ -63,7 +61,6 @@ for index, row in df.iterrows():
 	sym = 'sym' in mode
 	transym = 'transym' in mode
 	real = 'real' in mode
-	refl = 'refl' in mode
 
 	"""------------------------------------------------------ Optim ---------------------------------------------------------------------------"""
 
@@ -78,14 +75,14 @@ for index, row in df.iterrows():
 		Hr = sisl.io.siesta.tshsSileSiesta(elec_right_file).read_hamiltonian()
 		mode_obj = 0
 	else:
-		geom = cap.geom_from_xyz(dev_file, atom, r_atom, nsc)
+		geom = geom_from_xyz(dev_file, atom, r_atom, nsc)
 		Hd    = sisl.Hamiltonian(geom)
 		Hd.construct([R, hop])
 		
-		geom_l = cap.geom_from_xyz(elec_left_file, atom, r_atom, nsc)
+		geom_l = geom_from_xyz(elec_left_file, atom, r_atom, nsc)
 		Hl = sisl.Hamiltonian(geom_l)
 		Hl.construct([R, hop])	
-		geom_r = cap.geom_from_xyz(elec_right_file, atom, r_atom, nsc)
+		geom_r = geom_from_xyz(elec_right_file, atom, r_atom, nsc)
 		Hr = sisl.Hamiltonian(geom_r)
 		Hr.construct([R, hop])
 		
@@ -96,7 +93,7 @@ for index, row in df.iterrows():
 
 	elecs  = {"left":Hl, "right":Hr}
 	
-	### SETUP OBJECTIVE TRANSMISSION AND REFLECTION
+	### SETUP OBJECTIVE TRANSMISSION
 
 	if Tobj_file == None:
 		nsc_obj = nsc.copy()
@@ -104,39 +101,17 @@ for index, row in df.iterrows():
 		Hd.set_nsc(nsc_obj)
 		Hl.set_nsc(nsc_obj)
 		Hr.set_nsc(nsc_obj)
-		H_center_plus_obj = cap.matrix_elements(Hd, pdir = bc_axis, tdir = axis, which=0, mode=mode_obj)
-		H_left_obj    = cap.matrix_elements(Hl,pdir = bc_axis, tdir = axis,which = 0, mode=mode_obj)
-		V_left_obj    = cap.matrix_elements(Hl,pdir = bc_axis, tdir = axis,which = -1, mode=mode_obj)
-		H_right_obj   = cap.matrix_elements(Hr,pdir = bc_axis, tdir = axis,which = 0, mode=mode_obj)
-		V_right_obj   = cap.matrix_elements(Hr,pdir = bc_axis, tdir = axis,which = 1, mode=mode_obj)
-		Tobj = cap.trans(E, K, H_left_obj, V_left_obj, H_center_plus_obj, H_right_obj, V_right_obj, eavg=False, kavg=kavg, eta=eta).real
+		H_center_plus_obj = matrix_elements(Hd, pdir = bc_axis, tdir = axis, which=0, mode=mode_obj)
+		H_left_obj    = matrix_elements(Hl,pdir = bc_axis, tdir = axis,which = 0, mode=mode_obj)
+		V_left_obj    = matrix_elements(Hl,pdir = bc_axis, tdir = axis,which = -1, mode=mode_obj)
+		H_right_obj   = matrix_elements(Hr,pdir = bc_axis, tdir = axis,which = 0, mode=mode_obj)
+		V_right_obj   = matrix_elements(Hr,pdir = bc_axis, tdir = axis,which = 1, mode=mode_obj)
+		Tobj = trans(E, K, H_left_obj, V_left_obj, H_center_plus_obj, H_right_obj, V_right_obj, eavg=False, kavg=kavg, eta=eta).real
 		Hd.set_nsc(nsc)
 		Hl.set_nsc(nsc)
 		Hr.set_nsc(nsc)
 	else:	
 		Tobj = np.load(Tobj_file)
-
-	if "refl" in mode:
-		if Robj_file == None:
-			nsc_obj = nsc.copy()
-			nsc_obj[axis] = 3
-			Hd.set_nsc(nsc_obj)
-			Hl.set_nsc(nsc_obj)
-			Hr.set_nsc(nsc_obj)
-			H_center_plus_obj = cap.matrix_elements(Hd, pdir = bc_axis, tdir = axis, which=0, mode=mode_obj)
-			H_left_obj    = cap.matrix_elements(Hl,pdir = bc_axis, tdir = axis,which = 0, mode=mode_obj)
-			V_left_obj    = cap.matrix_elements(Hl,pdir = bc_axis, tdir = axis,which = -1, mode=mode_obj)
-			H_right_obj   = cap.matrix_elements(Hr,pdir = bc_axis, tdir = axis,which = 0, mode=mode_obj)
-			V_right_obj   = cap.matrix_elements(Hr,pdir = bc_axis, tdir = axis,which = 1, mode=mode_obj)
-			Robj = cap.refl1(E, K, H_left_obj, V_left_obj, H_center_plus_obj, H_right_obj, V_right_obj, eavg=False, kavg=kavg, eta=eta).real
-			Hd.set_nsc(nsc)
-			Hl.set_nsc(nsc)
-			Hr.set_nsc(nsc)
-		else:
-			Robj = np.load(Robj_file)
-		Tobj = np.array([Tobj,Robj])
-	else:
-		Tobj = Tobj
 
 	### SETUP VARIABLE VECTOR AND X0
 
@@ -153,7 +128,7 @@ for index, row in df.iterrows():
 		no_el     = H_elec.no
 		X0_arr = np.zeros((no_el,no_el), dtype=np.complex128)
 		if "diag" in mode:
-			X0_arr += np.diag(np.diag(cap.CAP(lambda r,dr : f_CAP(r,dr,params_CAP0), elecs[side], side, axis=elecs[side].cell[axis]/np.linalg.norm(elecs[side].cell[axis])))-1j*eta) #just so that the first element is non zero
+			X0_arr += np.diag(np.diag(CAP(lambda r,dr : f_CAP(r,dr,params_CAP0), elecs[side], side, axis=elecs[side].cell[axis]/np.linalg.norm(elecs[side].cell[axis])))-1j*eta) #just so that the first element is non zero
 		if "hop" in mode:
 			X0_arr += eta*(H_elec.Hk().toarray() - np.tril(H_elec.Hk().toarray())) #as the result will be symmetric, we only need the upper triangle, multiplied by eta because have to be little to satisfy Gamma positive definite
 		if transym: #The first half of the matrix is one part of the transverse symmetry
@@ -223,16 +198,16 @@ for index, row in df.iterrows():
 				WCAP_arr = np.zeros((no["right"],no["right"]), dtype=np.complex128)
 				WCAP_arr[:no["right"]//2] = sp.csr_matrix((WCAP, indices["right"], indptr["right"]), shape=(no["right"]//2, no["right"])).toarray()
 				WCAP_arr[no["right"]//2:,no["right"]//2:] = WCAP_arr[:no["right"]//2,:no["right"]//2]
-				return cap.symmetrize(WCAP_arr)
+				return symmetrize(WCAP_arr)
 			else:
 				if real:
 					WCAP = np.zeros_like(X, dtype=np.complex128)
 					WCAP[::2] = -1j*X[::2]
 					WCAP[1::2] = -X[1::2]
-					return cap.symmetrize(sp.csr_matrix((WCAP, indices["right"], indptr["right"]), shape=(no["right"], no["right"])).toarray())
+					return symmetrize(sp.csr_matrix((WCAP, indices["right"], indptr["right"]), shape=(no["right"], no["right"])).toarray())
 				else:
 					WCAP = -1j*X
-					return cap.symmetrize(sp.csr_matrix((WCAP, indices["right"], indptr["right"]), shape=(no["right"], no["right"])).toarray())
+					return symmetrize(sp.csr_matrix((WCAP, indices["right"], indptr["right"]), shape=(no["right"], no["right"])).toarray())
 		else:
 			if transym:
 				WCAP_arr = {}
@@ -246,7 +221,7 @@ for index, row in df.iterrows():
 					WCAP_arr[side] = np.zeros((no[side],no[side]), dtype=np.complex128)
 					WCAP_arr[side][:no[side]//2] = sp.csr_matrix((WCAP, indices[side], indptr[side]), shape=(no[side]//2, no[side])).toarray()
 					WCAP_arr[side][no[side]//2:,no[side]//2:] = WCAP_arr[:no[side]//2,:no[side]//2]
-					WCAP_arr[side] = cap.symmetrize(WCAP_arr[side])
+					WCAP_arr[side] = symmetrize(WCAP_arr[side])
 				return WCAP_arr
 			else:
 				if real:
@@ -255,13 +230,13 @@ for index, row in df.iterrows():
 						WCAP = np.zeros_like(X[X_slice[side]], dtype=np.complex128)
 						WCAP[::2] = -1j*X[X_slice[side]][::2]
 						WCAP[1::2] = -X[X_slice[side]][1::2]
-						WCAP_arr[side] = cap.symmetrize(sp.csr_matrix((WCAP, indices[side], indptr[side]), shape=(no[side], no[side])).toarray())
+						WCAP_arr[side] = symmetrize(sp.csr_matrix((WCAP, indices[side], indptr[side]), shape=(no[side], no[side])).toarray())
 					return WCAP_arr
 				else:
 					WCAP_arr = {}
 					for side in ["left", "right"]:
 						WCAP = -1j*X[X_slice[side]]
-						WCAP_arr[side] = cap.symmetrize(sp.csr_matrix((WCAP, indices[side], indptr[side]), shape=(no[side], no[side])).toarray())
+						WCAP_arr[side] = symmetrize(sp.csr_matrix((WCAP, indices[side], indptr[side]), shape=(no[side], no[side])).toarray())
 					return WCAP_arr
 	
 	### SETUP FUNCTION TO MINIMIZE
@@ -274,9 +249,9 @@ for index, row in df.iterrows():
 		else:
 			WCAP_l, WCAP_r =  WCAP_arr["left"], WCAP_arr["right"]
 		if "hop" in mode:
-			return cap.rmse(cap.transCAP(E, K_, Hd, WCAP_l, WCAP_r, bc_axis, eavg=False, kavg=kavg, eta=eta, refl=refl).real , Tobj)
+			return rmse(transCAP(E, K_, Hd, WCAP_l, WCAP_r, bc_axis, eavg=False, kavg=kavg, eta=eta, refl=False).real , Tobj)
 		else:
-			return np.ravel(cap.transCAP(E, K_, Hd, WCAP_l, WCAP_r, bc_axis, eavg=False, kavg=kavg, eta=eta, refl=refl).real - Tobj)
+			return np.ravel(transCAP(E, K_, Hd, WCAP_l, WCAP_r, bc_axis, eavg=False, kavg=kavg, eta=eta, refl=False).real - Tobj)
 	
 	### OPTIMIZATION
 
@@ -288,10 +263,7 @@ for index, row in df.iterrows():
 		for j,k in enumerate(K):
 			print('k = ',k)
 			K_ = np.array([k])
-			if "refl" in mode:
-				Tobj = Tobj_full[:,:,j]
-			else:
-				Tobj = Tobj_full[:,j]
+			Tobj = Tobj_full[:,j]
 			if "hop" in mode:
 				res = sciopt.minimize(obj_fun, X0, method=method, options = options, bounds = bound, constraints=constraints, tol=tol)
 				error += res.fun

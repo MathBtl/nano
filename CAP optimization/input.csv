@@ -1,2 +1,2 @@
-Emin,Emax,ne,kmin,kmax,nk,eta,axis,dev_file,elec_left_file,elec_right_file,nsc,Tobj_file,Robj_file,kproc,tol,save_file,mode
-0,0.25,2,0.33,0.34,1,0.002,1,gr_y6sym.xyz,gr_y6_bot.xyz,gr_y6_top.xyz,"[3,1,1]",None,None,inde,0.001,test.npy,"['diag','sym','refl','hop']"
+Emin,Emax,ne,kmin,kmax,nk,eta,axis,dev_file,elec_left_file,elec_right_file,nsc,Tobj_file,kproc,tol,save_file,mode
+0,0.25,20,0.32,0.36,20,0.002,0,grh1_10_dev.TSHS,grh_10_el.TSHS,grh_10_er.TSHS,"[1,3,1]",Tobj_grh1_20-0-025_20-032-036.npy,inde,0.01,grh1_10_diagk.npy,"['diag','sym']"
